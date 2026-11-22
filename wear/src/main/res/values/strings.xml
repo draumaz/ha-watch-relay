@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">HA Controls</string>
+    <string name="tile_controls_label">HA Controls</string>
+    <string name="tile_controls_desc">Home Assistant entity switches &amp; buttons (via phone)</string>
+    <string name="tile_camera_label">HA Camera</string>
+    <string name="tile_camera_desc">Home Assistant security camera snapshot (via phone)</string>
+</resources>
