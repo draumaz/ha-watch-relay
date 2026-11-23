@@ -60,9 +60,9 @@ class PhoneDataListenerService : WearableListenerService() {
                                     a.entityId == b.entityId && a.state.equals(b.state, ignoreCase = true)
                                 }
                             WearLocalStore.saveStates(appCtx, snap)
-                            // Don't interrupt a running kinetic toggle animation if the phone's
-                            // authoritative state already matches our optimistic toggle.
-                            if (!(statesUnchanged && WearLocalStore.wasRecentlyToggled())) {
+                            // Authoritative state from the phone: skip tile redraw ONLY if it
+                            // matches what we just optimistically animated < 900ms ago.
+                            if (!(statesUnchanged && WearLocalStore.wasRecentlyToggled(withinMs = 900L))) {
                                 requestControlsTileUpdate()
                             }
                         }

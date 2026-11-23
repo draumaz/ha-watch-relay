@@ -91,8 +91,21 @@ object WearLocalStore {
         _statesFlow.value = snapshot
     }
 
+    /**
+     * Used when hydrating cached DataClient items so an older snapshot never
+     * clobbers a newer state or an in-flight optimistic toggle.
+     */
+    fun saveStatesIfNewer(context: Context, snapshot: EntityStatesSnapshot) {
+        if (wasRecentlyToggled(withinMs = 3_000L)) return
+        val current = readStates(context)
+        if (snapshot.updatedAtEpochMs > current.updatedAtEpochMs) {
+            saveStates(context, snapshot)
+        }
+    }
+
     fun applyOptimisticToggle(context: Context, entityId: String) {
         markOptimisticToggle()
+        val now = System.currentTimeMillis()
         val current = readStates(context)
         val updatedStates = current.states.map { st ->
             if (st.entityId == entityId) {
@@ -102,7 +115,7 @@ object WearLocalStore {
                     "switch", "light", "input_boolean", "fan" -> if (st.isOn) "off" else "on"
                     else -> st.state
                 }
-                st.copy(state = nextState, lastUpdatedEpochMs = System.currentTimeMillis())
+                st.copy(state = nextState, lastUpdatedEpochMs = now)
             } else {
                 st
             }
@@ -113,10 +126,17 @@ object WearLocalStore {
             updatedStates + HaEntityState(
                 entityId = entityId,
                 state = "on",
-                lastUpdatedEpochMs = System.currentTimeMillis(),
+                lastUpdatedEpochMs = now,
             )
         }
-        saveStates(context, current.copy(states = finalStates, error = null))
+        saveStates(
+            context,
+            current.copy(
+                states = finalStates,
+                updatedAtEpochMs = now,
+                error = null,
+            ),
+        )
     }
 
     fun readCameraMeta(context: Context): CameraFrameMeta? {

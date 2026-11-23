@@ -71,7 +71,7 @@ class PhoneRelayClient(context: Context) {
                     val json = DataMapItem.fromDataItem(item).dataMap.getString(DataLayerPaths.KEY_JSON)
                     if (json != null) {
                         val snap = HaJson.decodeFromString<EntityStatesSnapshot>(json)
-                        WearLocalStore.saveStates(appContext, snap)
+                        WearLocalStore.saveStatesIfNewer(appContext, snap)
                     }
                 }
             }

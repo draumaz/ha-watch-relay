@@ -141,7 +141,11 @@ object HaServiceMapper {
             } else {
                 ServiceCall("cover", "open_cover")
             }
-            "switch", "light", "input_boolean", "fan" -> ServiceCall("homeassistant", "toggle")
+            "switch", "light", "input_boolean", "fan" -> when (state) {
+                "on" -> ServiceCall("homeassistant", "turn_off")
+                "off" -> ServiceCall("homeassistant", "turn_on")
+                else -> ServiceCall("homeassistant", "toggle")
+            }
             else -> ServiceCall("homeassistant", "toggle")
         }
     }

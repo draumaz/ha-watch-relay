@@ -34,8 +34,16 @@ class SharedModelsTest {
     @Test
     fun serviceMapperResolvesDomainsCorrectly() {
         assertEquals(
-            HaServiceMapper.ServiceCall("homeassistant", "toggle"),
+            HaServiceMapper.ServiceCall("homeassistant", "turn_on"),
             HaServiceMapper.resolveAction(EntityActionRequest("switch.porch", "switch", "off")),
+        )
+        assertEquals(
+            HaServiceMapper.ServiceCall("homeassistant", "turn_off"),
+            HaServiceMapper.resolveAction(EntityActionRequest("light.lamp", "light", "on")),
+        )
+        assertEquals(
+            HaServiceMapper.ServiceCall("homeassistant", "toggle"),
+            HaServiceMapper.resolveAction(EntityActionRequest("switch.porch", "switch", null)),
         )
         assertEquals(
             HaServiceMapper.ServiceCall("button", "press"),
