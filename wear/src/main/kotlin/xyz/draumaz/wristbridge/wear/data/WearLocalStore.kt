@@ -1,6 +1,7 @@
 package xyz.draumaz.wristbridge.wear.data
 
 import android.content.Context
+import androidx.core.content.edit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +45,11 @@ object WearLocalStore {
     @Volatile
     private var lastOptimisticToggleEpochMs: Long = 0L
 
+    /** Confirmed states from before the in-flight optimistic toggle(s), for rollback. */
+    private var preToggleSnapshot: EntityStatesSnapshot? = null
+
+    private const val PENDING_TOGGLE_WINDOW_MS = 30_000L
+
     fun wasRecentlyToggled(withinMs: Long = 1_500L): Boolean =
         (System.currentTimeMillis() - lastOptimisticToggleEpochMs) < withinMs
 
@@ -74,7 +80,7 @@ object WearLocalStore {
 
     fun saveConfig(context: Context, config: WatchConfig) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_CONFIG, HaJson.encodeToString(config)).apply()
+        prefs.edit { putString(KEY_CONFIG, HaJson.encodeToString(config)) }
         _configFlow.value = config
     }
 
@@ -87,8 +93,41 @@ object WearLocalStore {
 
     fun saveStates(context: Context, snapshot: EntityStatesSnapshot) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_STATES, HaJson.encodeToString(snapshot)).apply()
+        prefs.edit { putString(KEY_STATES, HaJson.encodeToString(snapshot)) }
         _statesFlow.value = snapshot
+    }
+
+    /**
+     * The phone sends error-only snapshots (no states) when Home Assistant is unreachable.
+     * Keep the last confirmed states in that case instead of blanking every button, and roll
+     * back any pending optimistic toggle, since the action could not have reached HA.
+     */
+    fun mergeIncoming(context: Context, incoming: EntityStatesSnapshot): EntityStatesSnapshot {
+        val base = takePreToggleSnapshot()
+        if (incoming.error == null || incoming.states.isNotEmpty()) return incoming
+        return (base ?: readStates(context)).copy(
+            updatedAtEpochMs = incoming.updatedAtEpochMs,
+            error = incoming.error,
+        )
+    }
+
+    /**
+     * Restores the states from before any pending optimistic toggle (e.g. the phone could not
+     * be reached to deliver the action). Returns true if anything was rolled back.
+     */
+    fun revertOptimisticToggle(context: Context, error: String): Boolean {
+        val base = takePreToggleSnapshot() ?: return false
+        saveStates(context, base.copy(updatedAtEpochMs = System.currentTimeMillis(), error = error))
+        // Let the reverted state redraw immediately instead of being treated as an echo of the tap.
+        lastOptimisticToggleEpochMs = 0L
+        return true
+    }
+
+    /** Pops the pre-toggle snapshot if it belongs to a toggle recent enough to still be pending. */
+    private fun takePreToggleSnapshot(): EntityStatesSnapshot? = synchronized(this) {
+        val base = preToggleSnapshot
+        preToggleSnapshot = null
+        base?.takeIf { wasRecentlyToggled(withinMs = PENDING_TOGGLE_WINDOW_MS) }
     }
 
     /**
@@ -99,19 +138,29 @@ object WearLocalStore {
         if (wasRecentlyToggled(withinMs = 3_000L)) return
         val current = readStates(context)
         if (snapshot.updatedAtEpochMs > current.updatedAtEpochMs) {
-            saveStates(context, snapshot)
+            saveStates(context, mergeIncoming(context, snapshot))
         }
     }
 
     fun applyOptimisticToggle(context: Context, entityId: String) {
+        val current = readStates(context)
+        synchronized(this) {
+            // Keep the oldest confirmed base across rapid consecutive toggles.
+            if (preToggleSnapshot == null || !wasRecentlyToggled(withinMs = PENDING_TOGGLE_WINDOW_MS)) {
+                preToggleSnapshot = current
+            }
+        }
         markOptimisticToggle()
         val now = System.currentTimeMillis()
-        val current = readStates(context)
         val updatedStates = current.states.map { st ->
             if (st.entityId == entityId) {
                 val nextState = when (st.domain.lowercase()) {
                     "lock" -> if (st.state.equals("locked", true)) "unlocked" else "locked"
-                    "cover" -> if (st.state.equals("open", true)) "closed" else "open"
+                    "cover" -> if (st.state.equals("open", true) || st.state.equals("opening", true)) {
+                        "closed"
+                    } else {
+                        "open"
+                    }
                     "switch", "light", "input_boolean", "fan" -> if (st.isOn) "off" else "on"
                     else -> st.state
                 }
@@ -165,7 +214,7 @@ object WearLocalStore {
             }
         }
         val prefs = appCtx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_CAMERA_META, HaJson.encodeToString(meta)).apply()
+        prefs.edit { putString(KEY_CAMERA_META, HaJson.encodeToString(meta)) }
         val effectiveBytes = jpegBytes ?: readCameraBytes(appCtx)
         _cameraFlow.value = CachedCameraFrame(meta, effectiveBytes)
     }

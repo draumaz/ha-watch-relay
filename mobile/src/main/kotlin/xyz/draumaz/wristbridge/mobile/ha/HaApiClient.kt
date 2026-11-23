@@ -6,8 +6,10 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -101,7 +103,7 @@ class HaApiClient(
                 credentials.baseUrl,
                 "/api/services/${serviceCall.domain}/${serviceCall.service}",
             )
-            val payload = """{"entity_id":"${action.entityId}"}"""
+            val payload = buildServicePayload(action.entityId)
             val request = authedRequest(url, credentials.accessToken)
                 .post(payload.toRequestBody(JSON_MEDIA_TYPE))
                 .build()
@@ -153,6 +155,9 @@ class HaApiClient(
             val cleanPath = if (path.startsWith("/")) path else "/$path"
             return "$trimmed$cleanPath"
         }
+
+        fun buildServicePayload(entityId: String): String =
+            buildJsonObject { put("entity_id", entityId) }.toString()
 
         fun parseStatesList(jsonBody: String, nowEpochMs: Long): List<HaEntityState> {
             val rawList = HaJson.decodeFromString<List<RawHaState>>(jsonBody)

@@ -1,8 +1,8 @@
 package xyz.draumaz.wristbridge.wear.relay
 
 import android.content.Context
-import android.net.Uri
 import android.util.Log
+import androidx.core.net.toUri
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.Wearable
@@ -53,7 +53,7 @@ class PhoneRelayClient(context: Context) {
      */
     suspend fun hydrateFromDataClient() {
         runCatching {
-            val buffer = dataClient.getDataItems(Uri.parse("wear://*${DataLayerPaths.DATA_CONFIG}")).await()
+            val buffer = dataClient.getDataItems("wear://*${DataLayerPaths.DATA_CONFIG}".toUri()).await()
             buffer.use { items ->
                 for (item in items) {
                     val json = DataMapItem.fromDataItem(item).dataMap.getString(DataLayerPaths.KEY_JSON)
@@ -65,7 +65,7 @@ class PhoneRelayClient(context: Context) {
             }
         }
         runCatching {
-            val buffer = dataClient.getDataItems(Uri.parse("wear://*${DataLayerPaths.DATA_ENTITY_STATES}")).await()
+            val buffer = dataClient.getDataItems("wear://*${DataLayerPaths.DATA_ENTITY_STATES}".toUri()).await()
             buffer.use { items ->
                 for (item in items) {
                     val json = DataMapItem.fromDataItem(item).dataMap.getString(DataLayerPaths.KEY_JSON)
@@ -77,12 +77,15 @@ class PhoneRelayClient(context: Context) {
             }
         }
         runCatching {
-            val buffer = dataClient.getDataItems(Uri.parse("wear://*${DataLayerPaths.DATA_CAMERA_FRAME}")).await()
+            val buffer = dataClient.getDataItems("wear://*${DataLayerPaths.DATA_CAMERA_FRAME}".toUri()).await()
             buffer.use { items ->
                 for (item in items) {
                     val dataMap = DataMapItem.fromDataItem(item).dataMap
                     val metaJson = dataMap.getString(DataLayerPaths.KEY_CAMERA_META) ?: continue
                     val meta = HaJson.decodeFromString<CameraFrameMeta>(metaJson)
+                    // A fast-path MessageClient frame may already be newer than the synced item.
+                    val cachedTs = WearLocalStore.readCameraMeta(appContext)?.timestampEpochMs ?: 0L
+                    if (meta.timestampEpochMs < cachedTs) continue
                     val asset = dataMap.getAsset(DataLayerPaths.KEY_CAMERA_ASSET)
                     val bytes = asset?.let {
                         runCatching {

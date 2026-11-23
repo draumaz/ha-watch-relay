@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string-array name="android_wear_capabilities">
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Read by Google Play Services for Wearable capability discovery -->
+    <string-array name="android_wear_capabilities" tools:ignore="UnusedResources">
         <item>wristbridge_mobile_relay</item>
     </string-array>
 </resources>

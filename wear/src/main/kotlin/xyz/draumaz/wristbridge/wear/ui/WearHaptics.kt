@@ -29,13 +29,12 @@ object WearHaptics {
         turningOn: Boolean,
         isMomentary: Boolean,
     ): VibrationEffect {
-        val primitives = intArrayOf(
+        val supported = vibrator.areAllPrimitivesSupported(
             VibrationEffect.Composition.PRIMITIVE_CLICK,
             VibrationEffect.Composition.PRIMITIVE_TICK,
             VibrationEffect.Composition.PRIMITIVE_QUICK_RISE,
             VibrationEffect.Composition.PRIMITIVE_QUICK_FALL,
         )
-        val supported = vibrator.areAllPrimitivesSupported(*primitives)
         if (!supported) {
             return VibrationEffect.createPredefined(
                 if (turningOn || isMomentary) VibrationEffect.EFFECT_HEAVY_CLICK else VibrationEffect.EFFECT_CLICK,

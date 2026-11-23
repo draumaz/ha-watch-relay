@@ -60,7 +60,12 @@ class WatchRelayService : WearableListenerService() {
         }
     }
 
-    private suspend fun handleRefreshStates() {
+    /**
+     * Fetches the selected entities' states and pushes them to the watch. [actionError], if set,
+     * is attached to the snapshot so the watch can surface a failed action while still showing
+     * accurate (non-optimistic) states.
+     */
+    private suspend fun handleRefreshStates(actionError: String? = null) {
         val creds = configRepo.getCredentials()
         val config = configRepo.getWatchConfig()
         if (!creds.isValid) {
@@ -80,13 +85,14 @@ class WatchRelayService : WearableListenerService() {
                 EntityStatesSnapshot(
                     states = states,
                     updatedAtEpochMs = System.currentTimeMillis(),
+                    error = actionError,
                 )
             },
             onFailure = { err ->
                 Log.w(TAG, "Failed to fetch HA states", err)
                 EntityStatesSnapshot(
                     updatedAtEpochMs = System.currentTimeMillis(),
-                    error = err.message ?: "Unable to reach Home Assistant",
+                    error = actionError ?: err.message ?: "Unable to reach Home Assistant",
                 )
             },
         )
@@ -112,11 +118,9 @@ class WatchRelayService : WearableListenerService() {
         val callResult = haClient.executeEntityAction(creds, action)
         if (callResult.isFailure) {
             Log.w(TAG, "HA service call failed for ${action.entityId}", callResult.exceptionOrNull())
-            syncManager.pushEntityStates(
-                EntityStatesSnapshot(
-                    updatedAtEpochMs = System.currentTimeMillis(),
-                    error = callResult.exceptionOrNull()?.message ?: "Action failed",
-                ),
+            // Re-sync real states so the watch rolls back its optimistic toggle, and report the error.
+            handleRefreshStates(
+                actionError = callResult.exceptionOrNull()?.message ?: "Action failed",
             )
             return
         }
@@ -155,7 +159,19 @@ class WatchRelayService : WearableListenerService() {
         val result = haClient.fetchCameraSnapshot(creds, entityId)
         result.fold(
             onSuccess = { rawBytes ->
-                val processed = CameraImageProcessor.processForWatch(rawBytes, maxWidth, quality)
+                // An uncaught throw here would escape the launch{} and crash the relay process.
+                val processed = runCatching {
+                    CameraImageProcessor.processForWatch(rawBytes, maxWidth, quality)
+                }.getOrElse { err ->
+                    Log.w(TAG, "Failed to process camera frame for $entityId", err)
+                    val meta = CameraFrameMeta(
+                        entityId = entityId,
+                        timestampEpochMs = System.currentTimeMillis(),
+                        error = "Could not process camera image",
+                    )
+                    syncManager.pushCameraFrame(null, meta, sourceNodeId, preferFast)
+                    return
+                }
                 val meta = CameraFrameMeta(
                     entityId = entityId,
                     timestampEpochMs = System.currentTimeMillis(),

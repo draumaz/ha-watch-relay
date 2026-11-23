@@ -172,9 +172,13 @@ private fun WearHomeScreen(
                                 if (!entity.isMomentary) {
                                     WearLocalStore.applyOptimisticToggle(context, entity.entityId)
                                 }
-                                phoneReachable = relay.sendEntityAction(
+                                val delivered = relay.sendEntityAction(
                                     EntityActionRequest(entity.entityId, entity.domain, state?.state),
                                 )
+                                phoneReachable = delivered
+                                if (!delivered) {
+                                    WearLocalStore.revertOptimisticToggle(context, "Phone unreachable")
+                                }
                             }
                         },
                     )

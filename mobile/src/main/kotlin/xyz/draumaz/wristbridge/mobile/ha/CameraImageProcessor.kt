@@ -2,6 +2,7 @@ package xyz.draumaz.wristbridge.mobile.ha
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.core.graphics.scale
 import java.io.ByteArrayOutputStream
 import kotlin.math.roundToInt
 
@@ -48,7 +49,7 @@ object CameraImageProcessor {
             val ratio = maxWidthPx.toFloat() / longest.toFloat()
             val targetW = (decoded.width * ratio).roundToInt().coerceAtLeast(1)
             val targetH = (decoded.height * ratio).roundToInt().coerceAtLeast(1)
-            Bitmap.createScaledBitmap(decoded, targetW, targetH, true).also {
+            decoded.scale(targetW, targetH).also {
                 if (it !== decoded) decoded.recycle()
             }
         } else {

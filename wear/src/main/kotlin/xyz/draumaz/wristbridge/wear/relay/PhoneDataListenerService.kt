@@ -53,7 +53,8 @@ class PhoneDataListenerService : WearableListenerService() {
                 DataLayerPaths.DATA_ENTITY_STATES -> {
                     val json = dataMap.getString(DataLayerPaths.KEY_JSON) ?: continue
                     runCatching { HaJson.decodeFromString<EntityStatesSnapshot>(json) }
-                        .onSuccess { snap ->
+                        .onSuccess { incoming ->
+                            val snap = WearLocalStore.mergeIncoming(appCtx, incoming)
                             val prev = WearLocalStore.readStates(appCtx)
                             val statesUnchanged = prev.states.size == snap.states.size &&
                                 prev.states.zip(snap.states).all { (a, b) ->

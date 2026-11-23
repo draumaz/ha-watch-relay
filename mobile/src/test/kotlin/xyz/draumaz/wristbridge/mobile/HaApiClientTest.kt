@@ -20,6 +20,18 @@ class HaApiClientTest {
         )
     }
 
+    @Test
+    fun buildServicePayloadEscapesEntityId() {
+        assertEquals(
+            """{"entity_id":"light.kitchen"}""",
+            HaApiClient.buildServicePayload("light.kitchen"),
+        )
+        assertEquals(
+            """{"entity_id":"switch.a\"b"}""",
+            HaApiClient.buildServicePayload("switch.a\"b"),
+        )
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun buildUrlRejectsMissingScheme() {
         HaApiClient.buildUrl("homeassistant.local:8123", "/api/")

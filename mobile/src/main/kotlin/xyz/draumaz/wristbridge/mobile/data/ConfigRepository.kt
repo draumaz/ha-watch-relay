@@ -2,6 +2,7 @@ package xyz.draumaz.wristbridge.mobile.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import kotlinx.serialization.encodeToString
@@ -49,10 +50,10 @@ class ConfigRepository(context: Context) {
     )
 
     fun saveCredentials(baseUrl: String, accessToken: String) {
-        securePrefs.edit()
-            .putString(KEY_BASE_URL, baseUrl.trim().trimEnd('/'))
-            .putString(KEY_ACCESS_TOKEN, accessToken.trim())
-            .apply()
+        securePrefs.edit {
+            putString(KEY_BASE_URL, baseUrl.trim().trimEnd('/'))
+            putString(KEY_ACCESS_TOKEN, accessToken.trim())
+        }
     }
 
     fun getWatchConfig(): WatchConfig {
@@ -72,9 +73,9 @@ class ConfigRepository(context: Context) {
             isHaConfigured = creds.isValid,
             updatedAtEpochMs = System.currentTimeMillis(),
         )
-        configPrefs.edit()
-            .putString(KEY_WATCH_CONFIG_JSON, HaJson.encodeToString(stamped))
-            .apply()
+        configPrefs.edit {
+            putString(KEY_WATCH_CONFIG_JSON, HaJson.encodeToString(stamped))
+        }
         return stamped
     }
 

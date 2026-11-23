@@ -2,7 +2,9 @@ package xyz.draumaz.wristbridge.wear.tiles
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.util.Log
 import androidx.concurrent.futures.CallbackToFutureAdapter
+import androidx.core.graphics.scale
 import androidx.wear.protolayout.ActionBuilders
 import androidx.wear.protolayout.ColorBuilders.argb
 import androidx.wear.protolayout.DimensionBuilders.dp
@@ -41,6 +43,7 @@ class CameraTileService : TileService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val relay by lazy { PhoneRelayClient(applicationContext) }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun onTileEnterEvent(requestParams: EventBuilders.TileEnterEvent) {
         scope.launch {
             relay.hydrateFromDataClient()
@@ -51,51 +54,56 @@ class CameraTileService : TileService() {
     override fun onTileRequest(requestParams: RequestBuilders.TileRequest): ListenableFuture<TileBuilders.Tile> {
         return CallbackToFutureAdapter.getFuture { completer ->
             scope.launch {
-                val clickId = requestParams.currentState.lastClickableId
-                var phoneOffline = false
+                try {
+                    val clickId = requestParams.currentState.lastClickableId
+                    var phoneOffline = false
 
-                if (clickId == CLICK_REFRESH_CAMERA) {
-                    phoneOffline = !requestFreshFrameFromPhone()
-                } else {
-                    relay.hydrateFromDataClient()
-                    phoneOffline = !relay.isPhoneReachable()
-                    // Also trigger a background refresh if cached frame is stale (> configured interval)
+                    if (clickId == CLICK_REFRESH_CAMERA) {
+                        phoneOffline = !requestFreshFrameFromPhone()
+                    } else {
+                        relay.hydrateFromDataClient()
+                        phoneOffline = !relay.isPhoneReachable()
+                        // Also trigger a background refresh if cached frame is stale (> configured interval)
+                        val cfg = WearLocalStore.readConfig(applicationContext)
+                        val meta = WearLocalStore.readCameraMeta(applicationContext)
+                        val ageMs = if (meta != null) System.currentTimeMillis() - meta.timestampEpochMs else Long.MAX_VALUE
+                        if (!phoneOffline && cfg.cameraEntityId != null && ageMs > cfg.cameraRefreshIntervalSec * 1000L) {
+                            requestFreshFrameFromPhone()
+                        }
+                    }
+
                     val cfg = WearLocalStore.readConfig(applicationContext)
                     val meta = WearLocalStore.readCameraMeta(applicationContext)
-                    val ageMs = if (meta != null) System.currentTimeMillis() - meta.timestampEpochMs else Long.MAX_VALUE
-                    if (!phoneOffline && cfg.cameraEntityId != null && ageMs > cfg.cameraRefreshIntervalSec * 1000L) {
-                        requestFreshFrameFromPhone()
-                    }
+                    val hasImage = WearLocalStore.readCameraBytes(applicationContext) != null
+                    val resVersion = "cam_${meta?.timestampEpochMs ?: 0L}_${meta?.sizeBytes ?: 0}"
+
+                    val layout = buildCameraLayout(cfg, meta, hasImage, phoneOffline)
+                    // Respect Wear OS minimum tile freshness while keeping it as responsive as allowed
+                    val freshnessMs = (cfg.cameraRefreshIntervalSec.coerceAtLeast(20)) * 1000L
+
+                    val tile = TileBuilders.Tile.Builder()
+                        .setResourcesVersion(resVersion)
+                        .setFreshnessIntervalMillis(freshnessMs)
+                        .setTileTimeline(
+                            TimelineBuilders.Timeline.Builder()
+                                .addTimelineEntry(
+                                    TimelineBuilders.TimelineEntry.Builder()
+                                        .setLayout(
+                                            LayoutElementBuilders.Layout.Builder()
+                                                .setRoot(layout)
+                                                .build(),
+                                        )
+                                        .build(),
+                                )
+                                .build(),
+                        )
+                        .build()
+
+                    completer.set(tile)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to build camera tile", e)
+                    completer.setException(e)
                 }
-
-                val cfg = WearLocalStore.readConfig(applicationContext)
-                val meta = WearLocalStore.readCameraMeta(applicationContext)
-                val hasImage = WearLocalStore.readCameraBytes(applicationContext) != null
-                val resVersion = "cam_${meta?.timestampEpochMs ?: 0L}_${meta?.sizeBytes ?: 0}"
-
-                val layout = buildCameraLayout(cfg, meta, hasImage, phoneOffline)
-                // Respect Wear OS minimum tile freshness while keeping it as responsive as allowed
-                val freshnessMs = (cfg.cameraRefreshIntervalSec.coerceAtLeast(20)) * 1000L
-
-                val tile = TileBuilders.Tile.Builder()
-                    .setResourcesVersion(resVersion)
-                    .setFreshnessIntervalMillis(freshnessMs)
-                    .setTileTimeline(
-                        TimelineBuilders.Timeline.Builder()
-                            .addTimelineEntry(
-                                TimelineBuilders.TimelineEntry.Builder()
-                                    .setLayout(
-                                        LayoutElementBuilders.Layout.Builder()
-                                            .setRoot(layout)
-                                            .build(),
-                                    )
-                                    .build(),
-                            )
-                            .build(),
-                    )
-                    .build()
-
-                completer.set(tile)
             }
             "CameraTileService.onTileRequest"
         }
@@ -111,14 +119,18 @@ class CameraTileService : TileService() {
 
                 val jpegBytes = WearLocalStore.readCameraBytes(applicationContext)
                 if (jpegBytes != null && jpegBytes.isNotEmpty()) {
-                    decodeToInlineImage(jpegBytes, MAX_TILE_IMAGE_DIM)?.let { inlineImg ->
-                        builder.addIdToImageMapping(
-                            RES_CAMERA_SNAPSHOT,
-                            ResourceBuilders.ImageResource.Builder()
-                                .setInlineResource(inlineImg)
-                                .build(),
-                        )
-                    }
+                    // A corrupt/partial frame must not leave the tile without resources.
+                    runCatching { decodeToInlineImage(jpegBytes, MAX_TILE_IMAGE_DIM) }
+                        .onFailure { Log.w(TAG, "Failed to decode camera frame", it) }
+                        .getOrNull()
+                        ?.let { inlineImg ->
+                            builder.addIdToImageMapping(
+                                RES_CAMERA_SNAPSHOT,
+                                ResourceBuilders.ImageResource.Builder()
+                                    .setInlineResource(inlineImg)
+                                    .build(),
+                            )
+                        }
                 }
 
                 completer.set(builder.build())
@@ -252,7 +264,7 @@ class CameraTileService : TileService() {
                     LayoutElementBuilders.Text.Builder()
                         .setText(title)
                         .setMaxLines(1)
-                        .setOverflow(LayoutElementBuilders.TEXT_OVERFLOW_ELLIPSIZE_END)
+                        .setOverflow(LayoutElementBuilders.TEXT_OVERFLOW_ELLIPSIZE)
                         .setFontStyle(
                             LayoutElementBuilders.FontStyle.Builder()
                                 .setSize(sp(11f))
@@ -395,7 +407,7 @@ class CameraTileService : TileService() {
             val ratio = maxDim.toFloat() / longest.toFloat()
             val w = (decoded.width * ratio).roundToInt().coerceAtLeast(1)
             val h = (decoded.height * ratio).roundToInt().coerceAtLeast(1)
-            Bitmap.createScaledBitmap(decoded, w, h, true).also {
+            decoded.scale(w, h).also {
                 if (it !== decoded) decoded.recycle()
             }
         } else {
@@ -426,6 +438,7 @@ class CameraTileService : TileService() {
     }
 
     companion object {
+        private const val TAG = "CameraTileService"
         private const val RES_CAMERA_SNAPSHOT = "ha_camera_snapshot"
         private const val CLICK_REFRESH_CAMERA = "refresh_camera"
         private const val CLICK_OPEN_LIVE = "open_live_camera"

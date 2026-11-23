@@ -90,7 +90,10 @@ class ControlsTileService : TileService() {
                     currentState = prevState?.state,
                 )
                 scope.launch {
-                    relay.sendEntityAction(actionReq)
+                    val delivered = relay.sendEntityAction(actionReq)
+                    if (!delivered && WearLocalStore.revertOptimisticToggle(applicationContext, PHONE_UNREACHABLE)) {
+                        runCatching { getUpdater(applicationContext).requestUpdate(ControlsTileService::class.java) }
+                    }
                 }
             } else {
                 // Hydrate asynchronously in background so tile rendering is never blocked
@@ -456,6 +459,7 @@ class ControlsTileService : TileService() {
 
     companion object {
         private const val RESOURCES_VERSION = "controls_v4_scallops_varied"
+        private const val PHONE_UNREACHABLE = "Phone unreachable"
         private const val CLICK_TOGGLE_PREFIX = "toggle:"
 
         private data class ScallopVariant(

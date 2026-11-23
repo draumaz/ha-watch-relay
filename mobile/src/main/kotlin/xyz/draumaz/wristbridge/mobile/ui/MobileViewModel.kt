@@ -3,11 +3,13 @@ package xyz.draumaz.wristbridge.mobile.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import xyz.draumaz.wristbridge.mobile.data.ConfigRepository
 import xyz.draumaz.wristbridge.mobile.data.HaCredentials
 import xyz.draumaz.wristbridge.mobile.ha.CameraImageProcessor
@@ -224,11 +226,14 @@ class MobileViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             haClient.fetchCameraSnapshot(creds, cameraId).fold(
                 onSuccess = { raw ->
-                    val processed = CameraImageProcessor.processForWatch(
-                        rawBytes = raw,
-                        maxWidthPx = cfg.cameraQuality.maxWidthPx,
-                        jpegQuality = cfg.cameraQuality.jpegQuality,
-                    )
+                    // Bitmap decode/scale/encode is CPU-bound; keep it off the main thread.
+                    val processed = withContext(Dispatchers.Default) {
+                        CameraImageProcessor.processForWatch(
+                            rawBytes = raw,
+                            maxWidthPx = cfg.cameraQuality.maxWidthPx,
+                            jpegQuality = cfg.cameraQuality.jpegQuality,
+                        )
+                    }
                     _uiState.update {
                         it.copy(
                             isLoadingCameraPreview = false,
