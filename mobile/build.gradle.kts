@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "xyz.draumaz.hawidget.mobile"
+    namespace = "xyz.draumaz.wristbridge.mobile"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "xyz.draumaz.hawidget"
+        applicationId = "xyz.draumaz.wristbridge"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

@@ -10,7 +10,7 @@
         android:allowBackup="false"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.HaWidgetWear">
+        android:theme="@style/Theme.WristBridgeWear">
 
         <meta-data
             android:name="com.google.android.wearable.standalone"

@@ -1,7 +1,7 @@
-# HA Watch Relay
+# WristBridge
 
 <p align="center">
-  <img src="docs/social-preview.png" alt="HA Watch Relay: Home Assistant Wear OS tiles, proxied through your phone">
+  <img src="docs/social-preview.png" alt="WristBridge: Home Assistant Wear OS tiles, proxied through your phone">
 </p>
 
 An Android + Wear OS companion app that provides two Home Assistant Wear OS Tiles — a minimalist
@@ -14,7 +14,7 @@ The native Home Assistant Wear OS client maintains its own direct connection to 
 which breaks when your HA server is only reachable through your phone's VPN (such as Tailscale)
 while away from home.
 
-In **HA Watch Relay**, the `:wear` module intentionally requests **no `INTERNET` permission** at
+In **WristBridge**, the `:wear` module intentionally requests **no `INTERNET` permission** at
 all. Every state fetch, service call, and camera snapshot happens on the Android phone app using
 the phone's network stack and is relayed to the watch over the Google Play Services **Wearable
 Data Layer API** (`MessageClient` + `DataClient`).
@@ -60,5 +60,5 @@ Data Layer API** (`MessageClient` + `DataClient`).
 ./gradlew :wear:assembleDebug                      # build Wear OS APK
 ```
 
-Both `:mobile` and `:wear` share the same `applicationId` (`xyz.draumaz.hawidget`) and must be
+Both `:mobile` and `:wear` share the same `applicationId` (`xyz.draumaz.wristbridge`) and must be
 signed with the same key so the Wearable Data Layer can pair them.

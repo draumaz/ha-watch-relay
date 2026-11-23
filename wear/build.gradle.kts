@@ -5,12 +5,12 @@ plugins {
 }
 
 android {
-    namespace = "xyz.draumaz.hawidget.wear"
+    namespace = "xyz.draumaz.wristbridge.wear"
     compileSdk = 37
 
     defaultConfig {
         // Must match :mobile applicationId for Wearable Data Layer communication
-        applicationId = "xyz.draumaz.hawidget"
+        applicationId = "xyz.draumaz.wristbridge"
         minSdk = 30
         targetSdk = 36
         versionCode = 1

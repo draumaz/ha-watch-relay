@@ -22,7 +22,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ha-widget"
+rootProject.name = "wristbridge"
 include(":shared")
 include(":mobile")
 include(":wear")
