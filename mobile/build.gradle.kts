@@ -6,12 +6,14 @@ plugins {
 
 android {
     namespace = "xyz.draumaz.wristbridge.mobile"
-    compileSdk = 37
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     defaultConfig {
         applicationId = "xyz.draumaz.wristbridge"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0.0"
     }

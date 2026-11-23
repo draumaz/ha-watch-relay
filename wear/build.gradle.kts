@@ -6,13 +6,15 @@ plugins {
 
 android {
     namespace = "xyz.draumaz.wristbridge.wear"
-    compileSdk = 37
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     defaultConfig {
         // Must match :mobile applicationId for Wearable Data Layer communication
         applicationId = "xyz.draumaz.wristbridge"
         minSdk = 30
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0.0"
     }
